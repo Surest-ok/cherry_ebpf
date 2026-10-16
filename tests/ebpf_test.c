@@ -10,6 +10,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include "cherry_ebpf.h"
+#include "cherry_kal.h"
 
 extern int printk(const char *fmt, ...);
 extern int uart_printf(const char *fmt, ...);
@@ -338,6 +339,7 @@ static bool test_trace_sched(void)
     cherry_trace_sched_switch(2, "proc2", 1, "proc1", 0);
 
     cherry_ebpf_prog_detach(p, CHERRY_TP_SCHED_SWITCH);
+    msleep(2);
     cherry_ebpf_prog_destroy(p);
 
     uint32_t key = 0;

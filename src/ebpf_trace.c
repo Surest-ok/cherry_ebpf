@@ -175,7 +175,8 @@ void cherry_ebpf_tracepoint_fire(uint32_t tp_id, void *ctx)
     struct cherry_tracepoint *tp = &g_tracepoints[tp_id];
     if (!tp->enabled) return;
 
-    /* Execute all attached programs */
+    /* Execute all attached programs under lock to protect against concurrent detach */
+    trace_lock();
     struct cherry_ebpf_prog_node *cur = tp->progs;
     while (cur) {
         if (cur->prog) {
@@ -185,6 +186,7 @@ void cherry_ebpf_tracepoint_fire(uint32_t tp_id, void *ctx)
         }
         cur = cur->next;
     }
+    trace_unlock();
 }
 
 /*
