@@ -385,6 +385,7 @@ static bool test_trace_irq(void)
     cherry_trace_irq_enter(33, 0);
 
     cherry_ebpf_prog_detach(p, CHERRY_TP_IRQ_ENTER);
+    msleep(2);
     cherry_ebpf_prog_destroy(p);
 
     uint32_t key = 0;

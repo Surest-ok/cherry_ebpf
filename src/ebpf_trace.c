@@ -37,20 +37,20 @@ static struct cherry_tracepoint g_tracepoints[CHERRY_TP_MAX] = {
 
 static uint64_t g_total_trace_events = 0;
 static uint64_t g_total_prog_execs = 0;
-static volatile uint32_t g_trace_lock = 0;
+static spinlock_t g_trace_spinlock = {0};
 static bool g_ebpf_initialized = false;
 
 /* Global RingBuffer for Shell live tracing */
 static struct bpf_map *g_trace_ringbuf = NULL;
 
-static inline void trace_lock(void) {
-    while (__atomic_test_and_set(&g_trace_lock, __ATOMIC_ACQUIRE)) {
-        __asm__ volatile("yield");
-    }
+static inline unsigned long trace_lock(void) {
+    unsigned long flags = 0;
+    spin_lock_irqsave(&g_trace_spinlock, flags);
+    return flags;
 }
 
-static inline void trace_unlock(void) {
-    __atomic_clear(&g_trace_lock, __ATOMIC_RELEASE);
+static inline void trace_unlock(unsigned long flags) {
+    spin_unlock_irqrestore(&g_trace_spinlock, flags);
 }
 
 static uint64_t get_timestamp_ns(void)
@@ -100,12 +100,12 @@ int cherry_ebpf_prog_attach(struct cherry_ebpf_prog *prog, uint32_t tp_id)
 {
     if (!prog || tp_id >= CHERRY_TP_MAX) return -1;
 
-    trace_lock();
+    unsigned long flags = trace_lock();
     struct cherry_tracepoint *tp = &g_tracepoints[tp_id];
     struct cherry_ebpf_prog_node *cur = tp->progs;
     while (cur) {
         if (cur->prog == prog) {
-            trace_unlock();
+            trace_unlock(flags);
             return 0; /* Already attached */
         }
         cur = cur->next;
@@ -113,7 +113,7 @@ int cherry_ebpf_prog_attach(struct cherry_ebpf_prog *prog, uint32_t tp_id)
 
     struct cherry_ebpf_prog_node *node = (struct cherry_ebpf_prog_node *)kmalloc(sizeof(*node), GFP_ATOMIC);
     if (!node) {
-        trace_unlock();
+        trace_unlock(flags);
         return -2;
     }
 
@@ -121,7 +121,7 @@ int cherry_ebpf_prog_attach(struct cherry_ebpf_prog *prog, uint32_t tp_id)
     node->next = tp->progs;
     tp->progs = node;
     prog->attached_tp_mask |= (1U << tp_id);
-    trace_unlock();
+    trace_unlock(flags);
 
     return 0;
 }
@@ -130,7 +130,7 @@ int cherry_ebpf_prog_detach(struct cherry_ebpf_prog *prog, uint32_t tp_id)
 {
     if (!prog || tp_id >= CHERRY_TP_MAX) return -1;
 
-    trace_lock();
+    unsigned long flags = trace_lock();
     struct cherry_tracepoint *tp = &g_tracepoints[tp_id];
     struct cherry_ebpf_prog_node **prev = &tp->progs;
     while (*prev) {
@@ -139,12 +139,12 @@ int cherry_ebpf_prog_detach(struct cherry_ebpf_prog *prog, uint32_t tp_id)
             *prev = (*prev)->next;
             kfree(to_free);
             prog->attached_tp_mask &= ~(1U << tp_id);
-            trace_unlock();
+            trace_unlock(flags);
             return 0;
         }
         prev = &(*prev)->next;
     }
-    trace_unlock();
+    trace_unlock(flags);
     return -2;
 }
 
@@ -176,7 +176,7 @@ void cherry_ebpf_tracepoint_fire(uint32_t tp_id, void *ctx)
     if (!tp->enabled) return;
 
     /* Execute all attached programs under lock to protect against concurrent detach */
-    trace_lock();
+    unsigned long flags = trace_lock();
     struct cherry_ebpf_prog_node *cur = tp->progs;
     while (cur) {
         if (cur->prog) {
@@ -186,7 +186,7 @@ void cherry_ebpf_tracepoint_fire(uint32_t tp_id, void *ctx)
         }
         cur = cur->next;
     }
-    trace_unlock();
+    trace_unlock(flags);
 }
 
 /*
