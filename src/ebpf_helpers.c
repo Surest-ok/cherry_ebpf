@@ -14,8 +14,6 @@
 
 extern int printk(const char *fmt, ...);
 extern int sys_getpid(void) __attribute__((weak));
-extern void *xTaskGetCurrentTaskHandle(void);
-extern const char *pcTaskGetName(void *xTask);
 extern uint32_t xPortGetCoreID(void);
 
 static uint64_t g_total_helper_calls = 0;
@@ -75,8 +73,7 @@ static uint64_t helper_get_current_pid_tgid(void)
 static int helper_get_current_comm(void *buf, uint32_t size_of_buf)
 {
     if (!buf || size_of_buf == 0) return -1;
-    void *task = xTaskGetCurrentTaskHandle();
-    const char *name = task ? pcTaskGetName(task) : "kernel";
+    const char *name = kthread_name(kthread_current());
     strncpy((char *)buf, name ? name : "unknown", size_of_buf - 1);
     ((char *)buf)[size_of_buf - 1] = '\0';
     return 0;

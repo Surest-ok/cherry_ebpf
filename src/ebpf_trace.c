@@ -13,8 +13,6 @@
 #include "cherry_kal.h"
 
 extern int printk(const char *fmt, ...);
-extern void *xTaskGetCurrentTaskHandle(void);
-extern const char *pcTaskGetName(void *xTask);
 
 static struct cherry_tracepoint g_tracepoints[CHERRY_TP_MAX] = {
     [CHERRY_TP_SYS_ENTER]         = { .id = CHERRY_TP_SYS_ENTER,         .name = "sys_enter",         .category = "syscall", .enabled = 1 },
@@ -213,8 +211,7 @@ void cherry_trace_sys_enter(long id, long a0, long a1, long a2, long a3, long a4
     ctx.args[3] = (uint64_t)a3;
     ctx.args[4] = (uint64_t)a4;
     ctx.args[5] = (uint64_t)a5;
-    void *task = xTaskGetCurrentTaskHandle();
-    const char *name = task ? pcTaskGetName(task) : "task";
+    const char *name = kthread_name(kthread_current());
     strncpy(ctx.comm, name ? name : "init", sizeof(ctx.comm) - 1);
     ctx.comm[sizeof(ctx.comm) - 1] = '\0';
 
@@ -234,8 +231,7 @@ void cherry_trace_sys_exit(long id, long ret)
     ctx.pid = 1;
     ctx.syscall_id = id;
     ctx.ret_val = ret;
-    void *task = xTaskGetCurrentTaskHandle();
-    const char *name = task ? pcTaskGetName(task) : "task";
+    const char *name = kthread_name(kthread_current());
     strncpy(ctx.comm, name ? name : "init", sizeof(ctx.comm) - 1);
     ctx.comm[sizeof(ctx.comm) - 1] = '\0';
 
@@ -268,8 +264,7 @@ void cherry_trace_sched_switch_hook(void)
     __atomic_fetch_add(&g_tracepoints[CHERRY_TP_SCHED_SWITCH].hit_count, 1, __ATOMIC_RELAXED);
     if (!g_tracepoints[CHERRY_TP_SCHED_SWITCH].progs) return;
 
-    void *task = xTaskGetCurrentTaskHandle();
-    const char *name = task ? pcTaskGetName(task) : "task";
+    const char *name = kthread_name(kthread_current());
     cherry_trace_sched_switch(0, "prev", 1, name, get_cpu_id());
 }
 
