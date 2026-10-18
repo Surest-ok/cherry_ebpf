@@ -264,10 +264,6 @@ void cherry_trace_sched_switch_hook(void)
 {
     if (!g_ebpf_initialized) return;
     __atomic_fetch_add(&g_tracepoints[CHERRY_TP_SCHED_SWITCH].hit_count, 1, __ATOMIC_RELAXED);
-    if (!g_tracepoints[CHERRY_TP_SCHED_SWITCH].progs) return;
-
-    const char *name = kthread_name(kthread_current());
-    cherry_trace_sched_switch(0, "prev", 1, name, get_cpu_id());
 }
 
 void cherry_trace_sched_wakeup(uint32_t pid, const char *comm, uint32_t cpu)
